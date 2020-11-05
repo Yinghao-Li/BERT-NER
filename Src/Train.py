@@ -54,6 +54,7 @@ class SoftTrainer(Trainer):
                          prediction_loss_only=prediction_loss_only,
                          tb_writer=tb_writer,
                          optimizers=optimizers)
+        pass
 
     def train(self, model_path: Optional[str] = None):
         """
@@ -212,9 +213,6 @@ class SoftTrainer(Trainer):
                         logging_loss = tr_loss
 
                         self._log(logs)
-
-                    if self.args.evaluate_during_training and self.global_step % self.args.eval_steps == 0:
-                        self.evaluate()
 
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         # In all cases (even distributed/parallel), self.model is always a reference

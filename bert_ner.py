@@ -31,7 +31,6 @@ from transformers import (
     AutoTokenizer,
     EvalPrediction,
     HfArgumentParser,
-    Trainer,
     TrainingArguments,
     set_seed,
 )
@@ -259,23 +258,6 @@ def main():
         if trainer.is_world_master():
             tokenizer.save_pretrained(training_args.output_dir)
 
-    # Evaluation
-    results = {}
-    if training_args.do_eval:
-        logger.info("*** Evaluate ***")
-
-        result = trainer.evaluate()
-
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
-        if trainer.is_world_master():
-            with open(output_eval_file, "w") as writer:
-                logger.info("***** Eval results *****")
-                for key, value in result.items():
-                    logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
-
-            results.update(result)
-
     # Predict
     if training_args.do_predict:
         test_dataset = TokenClassificationDataset(
@@ -294,16 +276,17 @@ def main():
         predictions, label_ids, metrics = trainer.predict(test_dataset)
         preds_list, _ = align_predictions(predictions, label_ids)
 
-        output_test_results_file = os.path.join(training_args.output_dir, "test_results.txt")
+        weak_name = data_args.weak_src if data_args.weak_src else 'true'
+        output_test_results_file = os.path.join(
+            training_args.output_dir, f"{data_args.dataset_name}-{weak_name}-test_results.txt"
+        )
         if trainer.is_world_master():
             with open(output_test_results_file, "w") as writer:
                 for key, value in metrics.items():
                     logger.info("  %s = %s", key, value)
                     writer.write("%s = %s\n" % (key, value))
 
-        # Save predictions
-
-    return results
+    return None
 
 
 def _mp_fn(index):

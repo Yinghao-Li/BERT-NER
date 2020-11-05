@@ -72,7 +72,14 @@ class Split(Enum):
 
 
 class TokenClassificationTask:
-    def read_examples_from_file(self, data_dir, dataset, mode: Union[Split, str], weak_src) -> List[InputExample]:
+    def read_examples_from_file(
+            self,
+            data_dir,
+            dataset,
+            tokenizer: PreTrainedTokenizer,
+            mode: Union[Split, str],
+            max_seq_length: Optional[int] = None,
+            weak_src: Optional[str] = None) -> List[InputExample]:
         raise NotImplementedError
 
     def get_labels(self, path: str) -> List[str]:
@@ -240,14 +247,10 @@ class TokenClassificationDataset(Dataset):
 
         data_path = os.path.join(data_dir, dataset)
         # Load data features from cache or dataset file
-        if weak_src:
-            cached_features_file = os.path.join(
-                data_dir, dataset, "cached_{}_{}_{}".format(dataset, mode.value, weak_src)
-            )
-        else:
-            cached_features_file = os.path.join(
-                data_dir, dataset, "cached_{}_{}_{}".format(dataset, mode.value, 'true')
-            )
+        src_name = weak_src if weak_src else 'true'
+        cached_features_file = os.path.join(
+            data_dir, dataset, "cached_{}_{}_{}_{}".format(dataset, src_name, mode.value, max_seq_length)
+        )
 
         # Make sure only the first process in distributed training processes the dataset,
         # and the others will use the cache.
@@ -262,8 +265,10 @@ class TokenClassificationDataset(Dataset):
                 examples = token_classification_task.read_examples_from_file(
                     data_dir=data_path,
                     dataset=dataset,
+                    tokenizer=tokenizer,
                     mode=mode,
-                    weak_src=weak_src
+                    weak_src=weak_src,
+                    max_seq_length=max_seq_length
                 )
                 self.features = token_classification_task.convert_examples_to_features(
                     examples,
