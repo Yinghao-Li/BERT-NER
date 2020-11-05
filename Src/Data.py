@@ -109,8 +109,6 @@ class TokenClassificationTask:
         logger.info("*** Constructing Dataset ***")
         features = []
         for (ex_index, example) in enumerate(tqdm(examples)):
-            # if ex_index % 10_000 == 0:
-            #     logger.info("Writing example %d of %d", ex_index, len(examples))
             no_weak_lbs = True if example.weak_lb_weights is None else False
 
             tokens = []
@@ -144,24 +142,6 @@ class TokenClassificationTask:
                 if not no_weak_lbs:
                     weak_lb_weights = weak_lb_weights[: (max_seq_length - special_tokens_count)]
 
-            # The convention in BERT is:
-            # (a) For sequence pairs:
-            #  tokens:   [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
-            #  type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1
-            # (b) For single sequences:
-            #  tokens:   [CLS] the dog is hairy . [SEP]
-            #  type_ids:   0   0   0   0  0     0   0
-            #
-            # Where "type_ids" are used to indicate whether this is the first
-            # sequence or the second sequence. The embedding vectors for `type=0` and
-            # `type=1` were learned during pre-training and are added to the wordpiece
-            # embedding vector (and position vector). This is not *strictly* necessary
-            # since the [SEP] token unambiguously separates the sequences, but it makes
-            # it easier for the model to learn the concept of sequences.
-            #
-            # For classification tasks, the first vector (corresponding to [CLS]) is
-            # used as as the "sentence vector". Note that this only makes sense because
-            # the entire model is fine-tuned.
             tokens += [sep_token]
             label_ids += [pad_token_label_id]
             if not no_weak_lbs:
@@ -216,16 +196,6 @@ class TokenClassificationTask:
             assert len(label_ids) == max_seq_length
             if not no_weak_lbs:
                 assert len(weak_lb_weights) == max_seq_length
-
-            # if ex_index < 2:
-            #     logger.info("*** Example ***")
-            #     logger.info("guid: %s", example.guid)
-            #     logger.info("tokens: %s", " ".join([str(x) for x in tokens]))
-            #     logger.info("input_ids: %s", " ".join([str(x) for x in input_ids]))
-            #     logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
-            #     logger.info("segment_ids: %s", " ".join([str(x) for x in segment_ids]))
-            #     logger.info("label_ids: %s", " ".join([str(x) for x in label_ids]))
-            #     logger.info("weak_label_weights: %s", "\n".join([str(x) for x in weak_lb_weights])),
 
             if "token_type_ids" not in tokenizer.model_input_names:
                 segment_ids = None
@@ -295,7 +265,6 @@ class TokenClassificationDataset(Dataset):
                     mode=mode,
                     weak_src=weak_src
                 )
-                # TODO: should import the weak labels here
                 self.features = token_classification_task.convert_examples_to_features(
                     examples,
                     labels,

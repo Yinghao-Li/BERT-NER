@@ -256,8 +256,6 @@ def main():
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
         trainer.save_model()
-        # For convenience, we also re-save the tokenizer to the same directory,
-        # so that you can share your model easily on huggingface.co/models =)
         if trainer.is_world_master():
             tokenizer.save_pretrained(training_args.output_dir)
 
@@ -283,6 +281,8 @@ def main():
         test_dataset = TokenClassificationDataset(
             token_classification_task=token_classification_task,
             data_dir=data_args.data_dir,
+            dataset=data_args.dataset_name,
+            weak_src=data_args.weak_src,
             tokenizer=tokenizer,
             labels=labels,
             model_type=config.model_type,
@@ -302,11 +302,6 @@ def main():
                     writer.write("%s = %s\n" % (key, value))
 
         # Save predictions
-        output_test_predictions_file = os.path.join(training_args.output_dir, "test_predictions.txt")
-        if trainer.is_world_master():
-            with open(output_test_predictions_file, "w") as writer:
-                with open(os.path.join(data_args.data_dir, "test.txt"), "r") as f:
-                    token_classification_task.write_predictions_to_file(writer, f, preds_list)
 
     return results
 

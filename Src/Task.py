@@ -41,7 +41,7 @@ class NER(TokenClassificationTask):
             examples.append(InputExample(
                 guid=f"{mode}-{guid_index+1}", words=words, labels=lbs, weak_lb_weights=weak_lbs
             ))
-        return examples
+        return examples[:100]
 
     @staticmethod
     def write_predictions_to_file(writer: TextIO, test_input_reader: TextIO, preds_list: List):
