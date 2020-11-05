@@ -4,7 +4,7 @@ import numpy as np
 from torch import nn
 from transformers import Trainer, is_apex_available
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Union
 
 
 if is_apex_available():
@@ -45,10 +45,23 @@ class SoftTrainer(Trainer):
         if self.args.past_index >= 0 and self._past is not None:
             inputs["mems"] = self._past
 
-        outputs = model(**inputs)
+        labels = inputs['labels']
+        input_ids = inputs['input_ids']
+        attention_mask = inputs['attention_mask']
 
-        # TODO: I should take the second return ([1]) and apply kld loss here
-        loss = outputs[0]  # model outputs are always tuple in transformers (see doc)
+        outputs = model(labels=labels, input_ids=input_ids, attention_mask=attention_mask)
+
+        # model outputs are always tuple in transformers (see doc)
+        loss, logits = outputs
+
+        try:
+            weak_lb_weights = inputs['weak_lb_weights']
+
+            loss = self.batch_kld_loss(
+                torch.log_softmax(logits, dim=-1), weak_lb_weights, labels != labels[0, 0]
+            )
+        except KeyError:
+            pass
 
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
@@ -65,3 +78,19 @@ class SoftTrainer(Trainer):
             loss.backward()
 
         return loss.item()
+
+    @staticmethod
+    def batch_kld_loss(batch_log_q, batch_p, batch_mask=None):
+        """
+        :param batch_log_q: Q(x) in log domain
+        :param batch_p: P(x)
+        :param batch_mask: select elements to compute loss
+        Log-domain KLD loss
+        :return: kld loss
+        """
+        kld = 0
+        for log_q, p, mask in zip(batch_log_q, batch_p, batch_mask):
+            kld = torch.sum(p[mask] * (torch.log(p[mask]) - log_q[mask]))
+        kld /= len(batch_log_q)
+
+        return kld

@@ -35,7 +35,8 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-from Src.utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
+from Src.Data import Split, TokenClassificationDataset, TokenClassificationTask, data_collator
+from Src.Train import SoftTrainer
 
 
 logger = logging.getLogger(__name__)
@@ -76,9 +77,12 @@ class DataTrainingArguments:
     data_dir: str = field(
         metadata={"help": "The input data dir. Should contain the .txt files for a CoNLL-2003-formatted task."}
     )
-    labels: Optional[str] = field(
+    dataset_name: str = field(
+        metadata={"help": "The name of the dataset."}
+    )
+    weak_src: str = field(
         default=None,
-        metadata={"help": "Path to a file containing all labels. If not specified, CoNLL-2003 labels are used."},
+        metadata={"help": "From which weak model the scores are generated."}
     )
     max_seq_length: int = field(
         default=128,
@@ -116,7 +120,7 @@ def main():
             f"Use --overwrite_output_dir to overcome."
         )
 
-    module = import_module("tasks")
+    module = import_module("Src.Task")
     try:
         token_classification_task_clazz = getattr(module, model_args.task_type)
         token_classification_task: TokenClassificationTask = token_classification_task_clazz()
@@ -146,7 +150,7 @@ def main():
     set_seed(training_args.seed)
 
     # Prepare CONLL-2003 task
-    labels = token_classification_task.get_labels(data_args.labels)
+    labels = token_classification_task.get_labels(data_args)
     label_map: Dict[int, str] = {i: label for i, label in enumerate(labels)}
     label2id: Dict[str, int] = {label: i for i, label in enumerate(labels)}
     num_labels = len(labels)
@@ -181,6 +185,8 @@ def main():
         TokenClassificationDataset(
             token_classification_task=token_classification_task,
             data_dir=data_args.data_dir,
+            dataset=data_args.dataset_name,
+            weak_src=data_args.weak_src,
             tokenizer=tokenizer,
             labels=labels,
             model_type=config.model_type,
@@ -195,6 +201,8 @@ def main():
         TokenClassificationDataset(
             token_classification_task=token_classification_task,
             data_dir=data_args.data_dir,
+            dataset=data_args.dataset_name,
+            weak_src=data_args.weak_src,
             tokenizer=tokenizer,
             labels=labels,
             model_type=config.model_type,
@@ -222,6 +230,7 @@ def main():
 
         return preds_list, out_label_list
 
+    # noinspection PyTypeChecker
     def compute_metrics(p: EvalPrediction) -> Dict:
         preds_list, out_label_list = align_predictions(p.predictions, p.label_ids)
         return {
@@ -232,12 +241,13 @@ def main():
         }
 
     # Initialize our Trainer
-    trainer = Trainer(
+    trainer = SoftTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         compute_metrics=compute_metrics,
+        data_collator=data_collator
     )
 
     # Training
