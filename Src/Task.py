@@ -15,9 +15,10 @@ logger = logging.getLogger(__name__)
 
 
 class NER(TokenClassificationTask):
-    def __init__(self, label_idx=-1):
+    def __init__(self):
         # in NER datasets, the last column is usually reserved for NER label
-        self.label_idx = label_idx
+        self._mappings = None
+        self._lbs = None
 
     def read_examples_from_file(
             self,
@@ -35,8 +36,21 @@ class NER(TokenClassificationTask):
         data = torch.load(file_path)
         words_list = data['sentences']
         spanned_labels_list = data['labels']
-        weak_lbs_list = torch.load(weak_lbs_file_path)[1] if weak_src else \
-            [None for _ in range(len(words_list))]
+        if dataset == 'Co03':
+            weak_lbs_list, weak_scores = torch.load(weak_lbs_file_path)
+            if weak_scores[0].shape[1] == 39:
+                temp_spans = list()
+                for spans in weak_lbs_list:
+                    normalized_span = dict()
+                    for k, v in spans.items():
+                        norm_span = self._mappings.get(v[0][0], v[0][0])
+                        if norm_span in self._lbs:
+                            normalized_span[k] = norm_span
+                    temp_spans.append(normalized_span)
+                weak_lbs_list = temp_spans
+        else:
+            weak_lbs_list = torch.load(weak_lbs_file_path)[1] if weak_src else \
+                [None for _ in range(len(words_list))]
         examples = []
 
         # TODO: Divide the sequence that exceeds the maximum length into several instances
@@ -53,6 +67,11 @@ class NER(TokenClassificationTask):
             len_bert_tokens = len(tokenizer.tokenize(nltk_string))
 
             if len_bert_tokens >= max_token_len:
+                if dataset == 'Co03':
+                    raise NotImplementedError(
+                        'This function has not been implemented for CoNLL 2003 dataset. '
+                        'Please use a larger maximum sequence length!'
+                    )
                 nltk_tokens_list = [words]
                 span_list = [spanned_lbs]
                 score_list = [weak_lbs] if weak_lbs is not None else [None for _ in range(len(words))]
@@ -119,17 +138,24 @@ class NER(TokenClassificationTask):
 
         for guid_index, (words, spanned_lbs, weak_lbs) in \
                 enumerate(zip(words_list, spanned_labels_list, weak_lbs_list)):
-            if weak_lbs is not None:
+            if weak_lbs is not None and dataset != 'Co03':
                 assert len(words) == len(weak_lbs)
             lbs = span_to_label(words, spanned_lbs)
             assert len(words) == len(lbs)
+            if dataset == 'Co03':
+                weak_lbs = span_to_label(words, weak_lbs)
+                assert len(words) == len(weak_lbs)
             examples.append(InputExample(
                 guid=f"{mode}-{guid_index+1}", words=words, labels=lbs, weak_lb_weights=weak_lbs
             ))
-        return examples
+        return examples[:100]
 
     def get_labels(self, args) -> List[str]:
         with open(os.path.join(args.data_dir, args.dataset_name, f"{args.dataset_name}-metadata.json")) as f:
-            lbs = json.load(f)['labels']
+            metadata = json.load(f)
+        lbs = metadata['labels']
+        if 'mapping' in metadata.keys():
+            self._mappings = metadata['mapping']
+            self._lbs = lbs
         bio_lbs = ["O"] + ["%s-%s" % (bi, label) for label in lbs for bi in "BI"]
         return bio_lbs

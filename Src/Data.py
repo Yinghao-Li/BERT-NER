@@ -112,6 +112,7 @@ class TokenClassificationTask:
         # TODO clean up all this to leverage built-in features of tokenizers
 
         label_map = {label: i for i, label in enumerate(label_list)}
+        use_hard_lbs = False
 
         logger.info("*** Constructing Dataset ***")
         features = []
@@ -139,7 +140,13 @@ class TokenClassificationTask:
                         # Use the real label id for the first token of the word,
                         # and padding ids for the remaining tokens
                         label_ids.extend([label_map[label]] + [pad_token_label_id] * (len(word_tokens) - 1))
-                        weak_lb_weights.extend([weak_lb] * len(word_tokens))
+                        if type(weak_lb) == str:
+                            use_hard_lbs = True
+                            weak_lb_weights.extend(
+                                [label_map[weak_lb]] + [pad_token_label_id] * (len(word_tokens) - 1)
+                            )
+                        else:
+                            weak_lb_weights.extend([weak_lb] * len(word_tokens))
 
             # Account for [CLS] and [SEP] with "- 2" and with "- 3" for RoBERTa.
             special_tokens_count = tokenizer.num_special_tokens_to_add()
@@ -152,13 +159,19 @@ class TokenClassificationTask:
             tokens += [sep_token]
             label_ids += [pad_token_label_id]
             if not no_weak_lbs:
-                weak_lb_weights += [np.zeros_like(weak_lb_weights[0])]
+                if not use_hard_lbs:
+                    weak_lb_weights += [np.zeros_like(weak_lb_weights[0])]
+                else:
+                    weak_lb_weights += [pad_token_label_id]
             if sep_token_extra:
                 # roberta uses an extra separator b/w pairs of sentences
                 tokens += [sep_token]
                 label_ids += [pad_token_label_id]
                 if not no_weak_lbs:
-                    weak_lb_weights += [np.zeros_like(weak_lb_weights[0])]
+                    if not use_hard_lbs:
+                        weak_lb_weights += [np.zeros_like(weak_lb_weights[0])]
+                    else:
+                        weak_lb_weights += [pad_token_label_id]
             segment_ids = [sequence_a_segment_id] * len(tokens)
 
             if cls_token_at_end:
@@ -166,13 +179,19 @@ class TokenClassificationTask:
                 label_ids += [pad_token_label_id]
                 segment_ids += [cls_token_segment_id]
                 if not no_weak_lbs:
-                    weak_lb_weights += [np.zeros_like(weak_lb_weights[0])]
+                    if not use_hard_lbs:
+                        weak_lb_weights += [np.zeros_like(weak_lb_weights[0])]
+                    else:
+                        weak_lb_weights += [pad_token_label_id]
             else:
                 tokens = [cls_token] + tokens
                 label_ids = [pad_token_label_id] + label_ids
                 segment_ids = [cls_token_segment_id] + segment_ids
                 if not no_weak_lbs:
-                    weak_lb_weights = [np.zeros_like(weak_lb_weights[0])] + weak_lb_weights
+                    if not use_hard_lbs:
+                        weak_lb_weights = [np.zeros_like(weak_lb_weights[0])] + weak_lb_weights
+                    else:
+                        weak_lb_weights = [pad_token_label_id] + weak_lb_weights
 
             input_ids = tokenizer.convert_tokens_to_ids(tokens)
 
@@ -188,14 +207,20 @@ class TokenClassificationTask:
                 segment_ids = ([pad_token_segment_id] * padding_length) + segment_ids
                 label_ids = ([pad_token_label_id] * padding_length) + label_ids
                 if not no_weak_lbs:
-                    weak_lb_weights = ([np.zeros_like(weak_lb_weights[0])] * padding_length) + weak_lb_weights
+                    if not use_hard_lbs:
+                        weak_lb_weights = ([np.zeros_like(weak_lb_weights[0])] * padding_length) + weak_lb_weights
+                    else:
+                        weak_lb_weights = ([pad_token_label_id] * padding_length) + weak_lb_weights
             else:
                 input_ids += [pad_token] * padding_length
                 input_mask += [0 if mask_padding_with_zero else 1] * padding_length
                 segment_ids += [pad_token_segment_id] * padding_length
                 label_ids += [pad_token_label_id] * padding_length
                 if not no_weak_lbs:
-                    weak_lb_weights += [np.zeros_like(weak_lb_weights[0])] * padding_length
+                    if not use_hard_lbs:
+                        weak_lb_weights += [np.zeros_like(weak_lb_weights[0])] * padding_length
+                    else:
+                        weak_lb_weights += [pad_token_label_id] * padding_length
 
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
@@ -207,13 +232,18 @@ class TokenClassificationTask:
             if "token_type_ids" not in tokenizer.model_input_names:
                 segment_ids = None
 
+            if not no_weak_lbs:
+                if not use_hard_lbs:
+                    weak_lb_weights = np.stack(weak_lb_weights)
+            else:
+                 weak_lb_weights = None
             features.append(
                 InputFeatures(
                     input_ids=input_ids,
                     attention_mask=input_mask,
                     token_type_ids=segment_ids,
                     label_ids=label_ids,
-                    weak_lb_weights=np.stack(weak_lb_weights) if not no_weak_lbs else None
+                    weak_lb_weights=weak_lb_weights
                 )
             )
         return features

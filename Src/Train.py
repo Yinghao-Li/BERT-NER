@@ -1,21 +1,20 @@
 import logging
-from transformers.trainer import Trainer
-
-from tqdm.auto import tqdm
-
 import collections
 import math
 import os
 import warnings
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from packaging import version
+from tqdm.auto import tqdm
 
 import torch
-from packaging import version
 from torch import nn
+from torch.nn import functional as F
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
 
+from transformers.trainer import Trainer
 from transformers.data.data_collator import DataCollator
 from transformers.file_utils import is_datasets_available, is_in_notebook, is_torch_tpu_available
 from transformers.integrations import (
@@ -430,9 +429,12 @@ class SoftTrainer(Trainer):
         try:
             weak_lb_weights = inputs['weak_lb_weights']
 
-            loss = self.batch_kld_loss(
-                torch.log_softmax(logits, dim=-1), weak_lb_weights, labels != labels[0, 0]
-            )
+            if weak_lb_weights.dtype == torch.int64:
+                loss = F.cross_entropy(logits, weak_lb_weights)
+            else:
+                loss = self.batch_kld_loss(
+                    torch.log_softmax(logits, dim=-1), weak_lb_weights, labels != labels[0, 0]
+                )
         except KeyError:
             pass
 
