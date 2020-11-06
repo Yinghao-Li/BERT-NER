@@ -430,6 +430,8 @@ class SoftTrainer(Trainer):
             weak_lb_weights = inputs['weak_lb_weights']
 
             if weak_lb_weights.dtype == torch.int64:
+                weak_lb_weights = weak_lb_weights.view(-1)
+                logits = logits.view(weak_lb_weights.size(0), -1)
                 loss = F.cross_entropy(logits, weak_lb_weights)
             else:
                 loss = self.batch_kld_loss(

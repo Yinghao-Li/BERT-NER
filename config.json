@@ -1,7 +1,7 @@
 {
     "data_dir": "./data",
-    "dataset_name": "Laptop",
-    "weak_src": "nhmm",
+    "dataset_name": "Co03",
+    "weak_src": "majority",
     "model_name_or_path": "distilbert-base-uncased",
     "output_dir": "germeval-model",
     "max_seq_length": 256,

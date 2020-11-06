@@ -148,7 +148,7 @@ class NER(TokenClassificationTask):
             examples.append(InputExample(
                 guid=f"{mode}-{guid_index+1}", words=words, labels=lbs, weak_lb_weights=weak_lbs
             ))
-        return examples[:100]
+        return examples
 
     def get_labels(self, args) -> List[str]:
         with open(os.path.join(args.data_dir, args.dataset_name, f"{args.dataset_name}-metadata.json")) as f:
