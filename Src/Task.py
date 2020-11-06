@@ -85,7 +85,7 @@ class NER(TokenClassificationTask):
                         token_split_1 = nltk_tokens[:split_idx]
                         token_split_2 = nltk_tokens[split_idx:]
                         new_token_list.extend([token_split_1, token_split_2])
-                        if scores:
+                        if scores is not None:
                             score_split_1 = scores[:split_idx]
                             score_split_2 = scores[split_idx:]
                             new_score_list.extend([score_split_1, score_split_2])
