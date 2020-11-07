@@ -36,7 +36,7 @@ class NER(TokenClassificationTask):
         data = torch.load(file_path)
         words_list = data['sentences']
         spanned_labels_list = data['labels']
-        if dataset == 'Co03':
+        if dataset == 'Co03' and weak_src:
             weak_lbs_list, weak_scores = torch.load(weak_lbs_file_path)
             if weak_scores[0].shape[1] == 39:
                 temp_spans = list()
@@ -142,7 +142,7 @@ class NER(TokenClassificationTask):
                 assert len(words) == len(weak_lbs)
             lbs = span_to_label(words, spanned_lbs)
             assert len(words) == len(lbs)
-            if dataset == 'Co03':
+            if dataset == 'Co03' and weak_src:
                 weak_lbs = span_to_label(words, weak_lbs)
                 assert len(words) == len(weak_lbs)
             examples.append(InputExample(
