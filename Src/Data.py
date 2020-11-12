@@ -30,6 +30,9 @@ from transformers import PreTrainedTokenizer
 from torch import nn
 from torch.utils.data.dataset import Dataset
 
+from nltk.tokenize import word_tokenize
+from nltk.tokenize import sent_tokenize
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,7 +50,7 @@ class InputExample:
 
     guid: str
     words: List[str]
-    labels: Optional[List[str]]
+    labels: Optional[List[str]] = None
     weak_lb_weights: Optional[List[str]] = None
 
 
@@ -87,21 +90,21 @@ class TokenClassificationTask:
 
     @staticmethod
     def convert_examples_to_features(
-        examples: List[InputExample],
-        label_list: List[str],
-        max_seq_length: int,
-        tokenizer: PreTrainedTokenizer,
-        cls_token_at_end=False,
-        cls_token="[CLS]",
-        cls_token_segment_id=1,
-        sep_token="[SEP]",
-        sep_token_extra=False,
-        pad_on_left=False,
-        pad_token=0,
-        pad_token_segment_id=0,
-        pad_token_label_id=-100,
-        sequence_a_segment_id=0,
-        mask_padding_with_zero=True,
+            examples: List[InputExample],
+            label_list: List[str],
+            max_seq_length: int,
+            tokenizer: PreTrainedTokenizer,
+            cls_token_at_end=False,
+            cls_token="[CLS]",
+            cls_token_segment_id=1,
+            sep_token="[SEP]",
+            sep_token_extra=False,
+            pad_on_left=False,
+            pad_token=0,
+            pad_token_segment_id=0,
+            pad_token_label_id=-100,
+            sequence_a_segment_id=0,
+            mask_padding_with_zero=True,
     ) -> List[InputFeatures]:
         """Loads a data file into a list of `InputFeatures`
         `cls_token_at_end` define the location of the CLS token:
@@ -236,7 +239,7 @@ class TokenClassificationTask:
                 if not use_hard_lbs:
                     weak_lb_weights = np.stack(weak_lb_weights)
             else:
-                 weak_lb_weights = None
+                weak_lb_weights = None
             features.append(
                 InputFeatures(
                     input_ids=input_ids,
@@ -320,6 +323,131 @@ class TokenClassificationDataset(Dataset):
                 )
                 logger.info(f"Saving features into cached file {cached_features_file}")
                 torch.save(self.features, cached_features_file)
+
+    def __len__(self):
+        return len(self.features)
+
+    def __getitem__(self, i) -> InputFeatures:
+        return self.features[i]
+
+
+class InferenceDataset(Dataset):
+    """
+    This will be superseded by a framework-agnostic approach
+    soon.
+    """
+
+    features: List[InputFeatures]
+    pad_token_label_id: int = nn.CrossEntropyLoss().ignore_index
+
+    # Use cross entropy ignore_index as padding label id so that only
+    # real label ids contribute to the loss later.
+
+    def __init__(
+            self,
+            token_classification_task: TokenClassificationTask,
+            token_list: List[List[str]],
+            labels: List[str],
+            tokenizer: PreTrainedTokenizer,
+            model_type: str,
+            max_seq_length: Optional[int] = None,
+    ):
+
+        # Make sure only the first process in distributed training processes the dataset,
+        # and the others will use the cache.
+        lock_path = "temporary.lock"
+        with FileLock(lock_path):
+
+            logger.info(f"Creating features")
+            examples = self.create_inference_examples(
+                token_list=token_list,
+                tokenizer=tokenizer,
+                max_seq_length=max_seq_length
+            )
+            self.features = token_classification_task.convert_examples_to_features(
+                examples,
+                labels,
+                max_seq_length,
+                tokenizer,
+                cls_token_at_end=bool(model_type in ["xlnet"]),
+                # xlnet has a cls token at the end
+                cls_token=tokenizer.cls_token,
+                cls_token_segment_id=2 if model_type in ["xlnet"] else 0,
+                sep_token=tokenizer.sep_token,
+                sep_token_extra=False,
+                # roberta uses an extra separator b/w pairs of sentences, cf.
+                # github.com/pytorch/fairseq/commit/1684e166e3da03f5b600dbb7855cb98ddfcd0805
+                pad_on_left=bool(tokenizer.padding_side == "left"),
+                pad_token=tokenizer.pad_token_id,
+                pad_token_segment_id=tokenizer.pad_token_type_id,
+                pad_token_label_id=self.pad_token_label_id,
+            )
+        try:
+            os.remove(lock_path)
+        except OSError:
+            pass
+
+    @staticmethod
+    def create_inference_examples(
+            token_list: List[List[str]],
+            tokenizer: PreTrainedTokenizer,
+            max_seq_length: Optional[int] = 512) -> List[InputExample]:
+        mode = Split.test
+        if isinstance(mode, Split):
+            mode = mode.value
+
+        examples = []
+        special_tokens_count = tokenizer.num_special_tokens_to_add()
+        buffer_length = 20
+        max_token_len = max_seq_length - special_tokens_count - buffer_length
+
+        tmp_word_list = list()
+        for tokens in token_list:
+
+            nltk_string = ' '.join(tokens)
+            len_bert_tokens = len(tokenizer.tokenize(nltk_string))
+
+            if len_bert_tokens >= max_token_len:
+                nltk_tokens_list = [tokens]
+                bert_length_list = [len(tokenizer.tokenize(' '.join(t))) for t in nltk_tokens_list]
+
+                while (np.asarray(bert_length_list) >= max_token_len).any():
+                    new_token_list = list()
+                    for nltk_tokens, bert_len in zip(nltk_tokens_list, bert_length_list):
+                        if bert_len < max_token_len:
+                            new_token_list.append(nltk_tokens)
+                            continue
+
+                        # split sentences
+                        nltk_string = ' '.join(nltk_tokens)
+                        sts = sent_tokenize(nltk_string)
+
+                        sent_lens = list()
+                        for st in sts:
+                            sent_lens.append(len(word_tokenize(st)))
+                        ends = [np.sum(sent_lens[:i]) for i in range(1, len(sent_lens) + 1)]
+
+                        nearest_end_idx = int(np.argmin((np.array(ends) - len(nltk_tokens) / 2) ** 2))
+
+                        split_idx = ends[nearest_end_idx]
+                        token_split_1 = nltk_tokens[:split_idx]
+                        token_split_2 = nltk_tokens[split_idx:]
+                        new_token_list.extend([token_split_1, token_split_2])
+
+                    nltk_tokens_list = new_token_list
+                    bert_length_list = [len(tokenizer.tokenize(' '.join(t))) for t in nltk_tokens_list]
+                tmp_word_list.extend(nltk_tokens_list)
+            else:
+                tmp_word_list.append(tokens)
+        token_list = tmp_word_list
+
+        for guid_index, tokens in enumerate(token_list):
+            lbs = ['O'] * len(tokens)
+            assert len(tokens) == len(lbs)
+            examples.append(InputExample(
+                guid=f"{mode}-{guid_index + 1}", words=tokens, labels=lbs
+            ))
+        return examples
 
     def __len__(self):
         return len(self.features)
