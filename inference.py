@@ -19,10 +19,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from importlib import import_module
-from typing import Dict, List, Optional, Tuple
-
-import numpy as np
-from torch import nn
+from typing import Optional
 
 from transformers import (
     AutoConfig,
@@ -34,6 +31,7 @@ from transformers import (
 )
 from Src.Data import InferenceDataset, TokenClassificationTask, data_collator
 from Src.Train import SoftTrainer
+from Src.Util import align_predictions
 
 
 logger = logging.getLogger(__name__)
@@ -70,12 +68,12 @@ class DataTrainingArguments:
     """
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
-    data_dir: str = field(
-        metadata={"help": "The input data dir. Should contain the .txt files for a CoNLL-2003-formatted task."}
-    )
-    dataset_name: str = field(
-        metadata={"help": "The name of the dataset."}
-    )
+    # data_dir: str = field(
+    #     metadata={"help": "The input data dir. Should contain the .txt files for a CoNLL-2003-formatted task."}
+    # )
+    # dataset_name: str = field(
+    #     metadata={"help": "The name of the dataset."}
+    # )
     weak_src: str = field(
         default=None,
         metadata={"help": "From which weak model the scores are generated."}
@@ -121,38 +119,15 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO if training_args.local_rank in [-1, 0] else logging.WARN,
     )
-    logger.warning(
-        "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s, 16-bits training: %s",
-        training_args.local_rank,
-        training_args.device,
-        training_args.n_gpu,
-        bool(training_args.local_rank != -1),
-        training_args.fp16,
-    )
-    logger.info("Training/evaluation parameters %s", training_args)
 
     # Set seed
     set_seed(training_args.seed)
 
-    # Prepare CONLL-2003 task
-    labels = token_classification_task.get_labels(data_args)
-    label_map: Dict[int, str] = {i: label for i, label in enumerate(labels)}
-    label2id: Dict[str, int] = {label: i for i, label in enumerate(labels)}
-    num_labels = len(labels)
-
-    # Load pretrained model and tokenizer
-    #
-    # Distributed training:
-    # The .from_pretrained methods guarantee that only one local process can concurrently
-    # download model & vocab.
-
     config = AutoConfig.from_pretrained(
-        model_args.config_name if model_args.config_name else model_args.model_name_or_path,
-        num_labels=num_labels,
-        id2label=label_map,
-        label2id=label2id,
-        cache_dir=model_args.cache_dir,
+        model_args.config_name if model_args.config_name else model_args.model_name_or_path
     )
+    labels = list(config.id2label.values())
+    label_map = config.id2label
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -164,22 +139,6 @@ def main():
         config=config,
         cache_dir=model_args.cache_dir,
     )
-
-    def align_predictions(predictions: np.ndarray, label_ids: np.ndarray) -> Tuple[List[int], List[int]]:
-        preds = np.argmax(predictions, axis=2)
-
-        batch_size, seq_len = preds.shape
-
-        out_label_list = [[] for _ in range(batch_size)]
-        preds_list = [[] for _ in range(batch_size)]
-
-        for i in range(batch_size):
-            for j in range(seq_len):
-                if label_ids[i, j] != nn.CrossEntropyLoss().ignore_index:
-                    out_label_list[i].append(label_map[label_ids[i][j]])
-                    preds_list[i].append(label_map[preds[i][j]])
-
-        return preds_list, out_label_list
 
     # Initialize our Trainer
     trainer = SoftTrainer(
@@ -203,14 +162,9 @@ def main():
     )
 
     predictions, label_ids, _ = trainer.predict(test_dataset)
-    preds_list, _ = align_predictions(predictions, label_ids)
+    preds_list, _ = align_predictions(predictions, label_ids, label_map)
 
     return None
-
-
-def _mp_fn(index):
-    # For xla_spawn (TPUs)
-    main()
 
 
 if __name__ == "__main__":
