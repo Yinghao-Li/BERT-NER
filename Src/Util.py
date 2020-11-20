@@ -1,6 +1,7 @@
 import numpy as np
 import torch.nn as nn
 from typing import List, Optional, Union, Dict, Tuple, Any
+from tokenizations import get_alignments, get_original_spans
 
 
 def span_to_label(tokens: List[str],
@@ -25,6 +26,141 @@ def span_to_label(tokens: List[str],
             labels[start + 1: end] = ['I-' + lb] * (end - start - 1)
 
     return labels
+
+
+def respan(src_tokens: List[str],
+           tgt_tokens: List[str],
+           src_span: List[tuple]):
+    """
+    transfer original spans to target spans
+    :param src_tokens: source tokens
+    :param tgt_tokens: target tokens
+    :param src_span: a list of span tuples. The first element in the tuple
+    should be the start index and the second should be the end index
+    :return: a list of transferred span tuples.
+    """
+    s2t, _ = get_alignments(src_tokens, tgt_tokens)
+    tgt_spans = list()
+    for spans in src_span:
+        start = s2t[spans[0]][0]
+        if spans[1] < len(s2t):
+            end = s2t[spans[1]][-1]
+        else:
+            end = s2t[-1][-1]
+        if end == start:
+            end += 1
+        tgt_spans.append((start, end))
+
+    return tgt_spans
+
+
+def txt_to_token_span(tokens: List[str],
+                      text: str,
+                      txt_spans):
+    """
+    Transfer text-domain spans to token-domain spans
+    :param tokens: tokens
+    :param text: text
+    :param txt_spans: text spans tuples: (start, end, ...)
+    :return: a list of transferred span tuples.
+    """
+    token_indices = get_original_spans(tokens, text)
+    tgt_spans = list()
+    for txt_span in txt_spans:
+        txt_start = txt_span[0]
+        txt_end = txt_span[1]
+        start = None
+        end = None
+        for i, (s, e) in enumerate(token_indices):
+            if s <= txt_start < e:
+                start = i
+            if s <= txt_end <= e:
+                end = i + 1
+            if (start is not None) and (end is not None):
+                break
+        assert (start is not None) and (end is not None), ValueError("input spans out of scope")
+        tgt_spans.append((start, end))
+    return tgt_spans
+
+
+def token_to_txt_span(tokens: List[str],
+                      text: str,
+                      token_spans):
+    """
+    Transfer text-domain spans to token-domain spans
+    :param tokens: tokens
+    :param text: text
+    :param token_spans: text spans tuples: (start, end, ...)
+    :return: a list of transferred span tuples.
+    """
+    token_indices = get_original_spans(tokens, text)
+    tgt_spans = dict()
+    for token_span, value in token_spans.items():
+        txt_start = token_indices[token_span[0]][0]
+        txt_end = token_indices[token_span[1]-1][1]
+        tgt_spans[(txt_start, txt_end)] = value
+    return tgt_spans
+
+
+def label_to_span(labels: List[str],
+                  scheme: Optional[str] = 'BIO') -> dict:
+    """
+    convert labels to spans
+    :param labels: a list of labels
+    :param scheme: labeling scheme, in ['BIO', 'BILOU'].
+    :return: labeled spans, a list of tuples (start_idx, end_idx, label)
+    """
+    assert scheme in ['BIO', 'BILOU'], ValueError("unknown labeling scheme")
+
+    labeled_spans = dict()
+    i = 0
+    while i < len(labels):
+        if labels[i] == 'O':
+            i += 1
+            continue
+        else:
+            if scheme == 'BIO':
+                if labels[i][0] == 'B':
+                    start = i
+                    lb = labels[i][2:]
+                    i += 1
+                    try:
+                        while labels[i][0] == 'I':
+                            i += 1
+                        end = i
+                        labeled_spans[(start, end)] = lb
+                    except IndexError:
+                        end = i
+                        labeled_spans[(start, end)] = lb
+                        i += 1
+                # this should not happen
+                elif labels[i][0] == 'I':
+                    i += 1
+            elif scheme == 'BILOU':
+                if labels[i][0] == 'U':
+                    start = i
+                    end = i + 1
+                    lb = labels[i][2:]
+                    labeled_spans[(start, end)] = lb
+                    i += 1
+                elif labels[i][0] == 'B':
+                    start = i
+                    lb = labels[i][2:]
+                    i += 1
+                    try:
+                        while labels[i][0] != 'L':
+                            i += 1
+                        end = i
+                        labeled_spans[(start, end)] = lb
+                    except IndexError:
+                        end = i
+                        labeled_spans[(start, end)] = lb
+                        break
+                    i += 1
+                else:
+                    i += 1
+
+    return labeled_spans
 
 
 def align_predictions(predictions: np.ndarray,

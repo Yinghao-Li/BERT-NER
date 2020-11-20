@@ -120,20 +120,22 @@ class TokenClassificationTask:
         logger.info("*** Constructing Dataset ***")
         features = []
         for (ex_index, example) in enumerate(tqdm(examples)):
+            words = [example.words[0]]
+            words += [' ' + w for w in example.words[1:]]
             no_weak_lbs = True if example.weak_lb_weights is None else False
 
             tokens = []
             label_ids = []
             weak_lb_weights = []
             if no_weak_lbs:
-                for word, label in zip(example.words, example.labels):
+                for word, label in zip(words, example.labels):
                     word_tokens = tokenizer.tokenize(word)
 
                     if len(word_tokens) > 0:
                         tokens.extend(word_tokens)
                         label_ids.extend([label_map[label]] + [pad_token_label_id] * (len(word_tokens) - 1))
             else:
-                for word, label, weak_lb in zip(example.words, example.labels, example.weak_lb_weights):
+                for word, label, weak_lb in zip(words, example.labels, example.weak_lb_weights):
                     word_tokens = tokenizer.tokenize(word)
 
                     # bert-base-multilingual-cased sometimes output "nothing ([])
