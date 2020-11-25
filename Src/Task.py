@@ -85,8 +85,8 @@ class NER(TokenClassificationTask):
                             zip(nltk_tokens_list, span_list, score_list, bert_length_list):
                         if bert_len < max_token_len:
                             new_token_list.append(nltk_tokens)
-                            span_list.append(spans)
-                            score_list.append(scores)
+                            new_span_list.append(spans)
+                            new_score_list.append(scores)
                             continue
 
                         # split sentences

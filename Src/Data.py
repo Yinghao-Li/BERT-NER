@@ -120,8 +120,7 @@ class TokenClassificationTask:
         logger.info("*** Constructing Dataset ***")
         features = []
         for (ex_index, example) in enumerate(tqdm(examples)):
-            words = [example.words[0]]
-            words += [' ' + w for w in example.words[1:]]
+            words = [' ' + w for w in example.words]
             no_weak_lbs = True if example.weak_lb_weights is None else False
 
             tokens = []
