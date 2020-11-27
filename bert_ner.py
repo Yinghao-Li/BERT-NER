@@ -278,7 +278,7 @@ def main():
 
         weak_name = data_args.weak_src if data_args.weak_src else 'true'
         output_test_results_file = os.path.join(
-            training_args.output_dir, f"{data_args.dataset_name}-{weak_name}-test_results.txt"
+            training_args.output_dir, f"{data_args.dataset_name}-{weak_name}-{training_args.seed}-test_results.txt"
         )
         if trainer.is_world_master():
             with open(output_test_results_file, "w") as writer:
