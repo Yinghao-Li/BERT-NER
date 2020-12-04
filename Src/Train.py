@@ -362,7 +362,7 @@ class SoftTrainer(Trainer):
             self._maybe_log_save_evalute(tr_loss, model, trial, epoch)
 
             # start evaluation session
-            if self.args.do_eval:
+            if self.args.do_eval and epoch > num_train_epochs / 3:
                 logger.info("  ---------- Start Evaluation ----------  ")
                 eval_results = self.evaluate()
                 f1 = eval_results['eval_f1']
