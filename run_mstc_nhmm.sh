@@ -10,7 +10,7 @@
 # Quit if there's any errors
 set -e
 
-DATASET=NCBI
+DATASET=MSTC
 EPOCH=50
 BATCH_SIZE=10
 MAX_SEQ_LEN=512
