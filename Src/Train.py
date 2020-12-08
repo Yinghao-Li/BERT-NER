@@ -362,7 +362,6 @@ class SoftTrainer(Trainer):
             self.control = self.callback_handler.on_epoch_end(self.args, self.state, self.control)
 
             # Teacher-student session
-            # TODO: Finish this
             if hasattr(self.args, 'self_training_start_epoch') and \
                     epoch >= self.args.self_training_start_epoch and \
                     (epoch - self.args.self_training_start_epoch) % self.args.teacher_update_period == 0:
