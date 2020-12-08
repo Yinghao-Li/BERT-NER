@@ -3,9 +3,11 @@ import collections
 import math
 import os
 import warnings
+import numpy as np
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from packaging import version
 from tqdm.auto import tqdm
+from Src.Utils import soft_frequency
 
 import torch
 from torch import nn
@@ -13,6 +15,7 @@ from torch.nn import functional as F
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
+from torch.utils.data.sampler import SequentialSampler
 
 from transformers.trainer import Trainer
 from transformers.data.data_collator import DataCollator
@@ -161,6 +164,7 @@ class SoftTrainer(Trainer):
 
         # Data loader and number of training steps
         train_dataloader = self.get_train_dataloader()
+        sequential_train_dataloader = self.get_sequential_train_dataloader()
 
         # Setting up training control variables:
         # number of training epochs: num_train_epochs
@@ -221,8 +225,6 @@ class SoftTrainer(Trainer):
                     else True
                 ),
             )
-        # find_unused_parameters breaks checkpointing as per
-        # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
 
         # Train!
         if is_torch_tpu_available():
@@ -285,6 +287,7 @@ class SoftTrainer(Trainer):
 
         self.control = self.callback_handler.on_train_begin(self.args, self.state, self.control)
 
+        start_eval = False
         for epoch in range(epochs_trained, num_train_epochs):
             logger.info("  ---------- Start Epoch %d ----------  ", epoch)
             logger.info("  ---------- Start Training ----------  ")
@@ -353,16 +356,38 @@ class SoftTrainer(Trainer):
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
                     self.control = self.callback_handler.on_step_end(self.args, self.state, self.control)
 
-                    self._maybe_log_save_evalute(tr_loss, model, trial, epoch)
-
                 if self.control.should_epoch_stop or self.control.should_training_stop:
                     break
 
             self.control = self.callback_handler.on_epoch_end(self.args, self.state, self.control)
-            self._maybe_log_save_evalute(tr_loss, model, trial, epoch)
+
+            # Teacher-student session
+            # TODO: Finish this
+            if hasattr(self.args, 'self_training_start_epoch') and \
+                    epoch >= self.args.self_training_start_epoch and \
+                    (epoch - self.args.self_training_start_epoch) % self.args.teacher_update_period == 0:
+                model.eval()
+                with torch.no_grad():
+                    preds, _, _ = self.prediction_loop(
+                        sequential_train_dataloader, description="Teacher-model-prediction"
+                    )
+                for i in range(len(self.train_dataset.features)):
+                    preds[i][self.train_dataset.features[i].weak_lb_weights == 0] = -np.inf
+                    p = soft_frequency(preds[i])
+                    self.train_dataset.features[i].weak_lb_weights = p
+                # update dataloader
+                train_dataloader = self.get_train_dataloader()
+                # exit evaluation mode
+                model.train()
 
             # start evaluation session
-            if self.args.do_eval and epoch > num_train_epochs / 3:
+            if self.args.do_eval and not start_eval:
+                if hasattr(self.args, 'self_training_start_epoch') and epoch > self.args.self_training_start_epoch:
+                    start_eval = True
+                elif epoch > num_train_epochs / 3:
+                    start_eval = True
+
+            if start_eval:
                 logger.info("  ---------- Start Evaluation ----------  ")
                 eval_results = self.evaluate()
                 f1 = eval_results['eval_f1']
@@ -375,9 +400,6 @@ class SoftTrainer(Trainer):
                     best_f1 = f1
                     best_state_dict = self.model.state_dict()
                     logger.info("  checkpoint updated!  ")
-
-            self.control = self.callback_handler.on_epoch_end(self.args, self.state, self.control)
-            self._maybe_log_save_evalute(tr_loss, model, trial, epoch)
 
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
@@ -519,7 +541,6 @@ class SoftTrainer(Trainer):
 
         return loss, logits, labels
 
-
     @staticmethod
     def batch_kld_loss(batch_log_q, batch_p, batch_mask=None):
         """
@@ -535,3 +556,27 @@ class SoftTrainer(Trainer):
         kld /= len(batch_log_q)
 
         return kld
+
+    def _get_sequential_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
+        if is_torch_tpu_available():
+            return SequentialDistributedSampler(
+                self.train_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal()
+            )
+        elif self.args.local_rank != -1:
+            return SequentialDistributedSampler(self.train_dataset)
+        else:
+            return SequentialSampler(self.train_dataset)
+
+    def get_sequential_train_dataloader(self) -> DataLoader:
+        if self.train_dataset is None:
+            raise ValueError("Trainer: training requires a train_dataset.")
+        train_sampler = self._get_sequential_train_sampler()
+
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.args.train_batch_size,
+            sampler=train_sampler,
+            collate_fn=self.data_collator,
+            drop_last=self.args.dataloader_drop_last,
+            num_workers=self.args.dataloader_num_workers,
+        )

@@ -8,7 +8,7 @@ from nltk.tokenize import word_tokenize
 from nltk.tokenize import sent_tokenize
 
 from Src.Data import InputExample, Split, TokenClassificationTask
-from Src.Util import span_to_label
+from Src.Utils import span_to_label
 from transformers import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
@@ -148,7 +148,7 @@ class NER(TokenClassificationTask):
             examples.append(InputExample(
                 guid=f"{mode}-{guid_index+1}", words=words, labels=lbs, weak_lb_weights=weak_lbs
             ))
-        return examples
+        return examples[:100]
 
     def get_labels(self, args) -> List[str]:
         with open(os.path.join(args.data_dir, args.dataset_name, f"{args.dataset_name}-metadata.json")) as f:

@@ -31,7 +31,7 @@ from transformers import (
 )
 from Src.Data import InferenceDataset, TokenClassificationTask, data_collator
 from Src.Train import SoftTrainer
-from Src.Util import align_predictions
+from Src.Utils import align_predictions
 
 
 logger = logging.getLogger(__name__)

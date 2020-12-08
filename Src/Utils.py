@@ -1,7 +1,10 @@
 import numpy as np
 import torch.nn as nn
+from scipy.special import softmax
 from typing import List, Optional, Union, Dict, Tuple, Any
 from tokenizations import get_alignments, get_original_spans
+from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
+from transformers import EvalPrediction
 
 
 def span_to_label(tokens: List[str],
@@ -180,3 +183,31 @@ def align_predictions(predictions: np.ndarray,
                 preds_list[i].append(label_map[preds[i][j]])
 
     return preds_list, out_label_list
+
+
+def compute_metrics(p: EvalPrediction, label_map: Dict[int, str]) -> Dict:
+    preds_list, out_label_list = align_predictions(p.predictions, p.label_ids, label_map=label_map)
+    return {
+        "accuracy_score": accuracy_score(out_label_list, preds_list),
+        "precision": precision_score(out_label_list, preds_list),
+        "recall": recall_score(out_label_list, preds_list),
+        "f1": f1_score(out_label_list, preds_list),
+    }
+
+
+def soft_frequency(logits, power=2, probs=False):
+    """
+    Unsupervised Deep Embedding for Clustering Analysis
+    https://arxiv.org/abs/1511.06335
+    """
+    if not probs:
+        p = softmax(logits, axis=-1)
+        p[p != p] = 0
+    else:
+        p = logits
+    f = np.sum(p, axis=0, keepdims=True)
+    p = p ** power / f
+    p = p / np.sum(p, axis=-1, keepdims=True) + 1e-9
+    p[p != p] = 0
+
+    return p
