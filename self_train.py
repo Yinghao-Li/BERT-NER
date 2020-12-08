@@ -151,6 +151,13 @@ def main():
     )
     logger.info("Training/evaluation parameters %s", training_args)
 
+    weak_name = data_args.weak_src if data_args.weak_src else 'true'
+    output_test_results_file = os.path.join(
+        training_args.output_dir, f"{data_args.dataset_name}-{weak_name}-{training_args.seed}-test_results.txt"
+    )
+    if os.path.exists(output_test_results_file):
+        os.remove(output_test_results_file)
+
     # Set seed
     set_seed(training_args.seed)
 
@@ -231,7 +238,8 @@ def main():
     # Training
     if training_args.do_train:
         trainer.train(
-            model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
+            model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None,
+            save_file=output_test_results_file
         )
         trainer.save_model()
         if trainer.is_world_master():
@@ -255,12 +263,8 @@ def main():
         predictions, label_ids, metrics = trainer.predict(test_dataset)
         preds_list, _ = align_predictions(predictions, label_ids, label_map=label_map)
 
-        weak_name = data_args.weak_src if data_args.weak_src else 'true'
-        output_test_results_file = os.path.join(
-            training_args.output_dir, f"{data_args.dataset_name}-{weak_name}-{training_args.seed}-test_results.txt"
-        )
         if trainer.is_world_master():
-            with open(output_test_results_file, "w") as writer:
+            with open(output_test_results_file, "a") as writer:
                 for key, value in metrics.items():
                     logger.info("  %s = %s", key, value)
                     writer.write("%s = %s\n" % (key, value))

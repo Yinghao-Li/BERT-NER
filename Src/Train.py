@@ -133,7 +133,10 @@ class SoftTrainer(Trainer):
                          optimizers)
         pass
 
-    def train(self, model_path: Optional[str] = None, trial: Union["optuna.Trial", Dict[str, Any]] = None):
+    def train(self,
+              model_path: Optional[str] = None,
+              trial: Union["optuna.Trial", Dict[str, Any]] = None,
+              save_file: Optional[str] = None):
         """
         Main training entry point.
 
@@ -143,6 +146,7 @@ class SoftTrainer(Trainer):
                 training will resume from the optimizer/scheduler states loaded here.
             trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
+            save_file:  where to save file
         """
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
@@ -381,7 +385,7 @@ class SoftTrainer(Trainer):
 
             # start evaluation session
             if self.args.do_eval and not start_eval:
-                if hasattr(self.args, 'self_training_start_epoch') and epoch > self.args.self_training_start_epoch:
+                if hasattr(self.args, 'self_training_start_epoch') and epoch > self.args.self_training_start_epoch-10:
                     start_eval = True
                 elif epoch > num_train_epochs / 3:
                     start_eval = True
@@ -399,6 +403,13 @@ class SoftTrainer(Trainer):
                     best_f1 = f1
                     best_state_dict = self.model.state_dict()
                     logger.info("  checkpoint updated!  ")
+
+                if self.is_world_master():
+                    with open(save_file, "a") as writer:
+                        writer.write(f" ----- Epoch = {epoch} ----- \n")
+                        for key, value in eval_results.items():
+                            logger.info("  %s = %s", key, value)
+                            writer.write("%s = %s\n" % (key, value))
 
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
