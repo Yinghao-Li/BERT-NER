@@ -396,20 +396,17 @@ class SoftTrainer(Trainer):
                 f1 = eval_results['eval_f1']
 
                 logger.info("***** Eval results *****")
-                for key, value in eval_results.items():
-                    logger.info("  %s = %s", key, value)
-
-                if f1 > best_f1:
-                    best_f1 = f1
-                    best_state_dict = self.model.state_dict()
-                    logger.info("  checkpoint updated!  ")
-
                 if self.is_world_master():
                     with open(save_file, "a") as writer:
                         writer.write(f" ----- Epoch = {epoch} ----- \n")
                         for key, value in eval_results.items():
                             logger.info("  %s = %s", key, value)
                             writer.write("%s = %s\n" % (key, value))
+
+                if f1 > best_f1:
+                    best_f1 = f1
+                    best_state_dict = self.model.state_dict()
+                    logger.info("  checkpoint updated!  ")
 
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
