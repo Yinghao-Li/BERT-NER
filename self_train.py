@@ -265,6 +265,7 @@ def main():
 
         if trainer.is_world_master():
             with open(output_test_results_file, "a") as writer:
+                writer.write(" ----- Test Results ----- \n")
                 for key, value in metrics.items():
                     logger.info("  %s = %s", key, value)
                     writer.write("%s = %s\n" % (key, value))

@@ -398,12 +398,13 @@ class SoftTrainer(Trainer):
 
                 logger.info("***** Eval results *****")
                 if self.is_world_master():
-                    with open(save_file, "a") as writer:
-                        writer.write(f" ----- Epoch = {epoch} ----- \n")
-                        for key, value in eval_results.items():
-                            logger.info("  %s = %s", key, value)
-                            writer.write("%s = %s\n" % (key, value))
-                        writer.write("  checkpoint updated!  \n")
+                    if save_file is not None:
+                        with open(save_file, "a") as writer:
+                            writer.write(f" ----- Epoch = {epoch} ----- \n")
+                            for key, value in eval_results.items():
+                                logger.info("  %s = %s", key, value)
+                                writer.write("%s = %s\n" % (key, value))
+                            writer.write("  checkpoint updated!  \n")
 
                 if f1 > best_f1:
                     best_f1 = f1

@@ -21,10 +21,6 @@ from dataclasses import dataclass, field
 from importlib import import_module
 from typing import Dict, List, Optional, Tuple
 
-import numpy as np
-from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
-from torch import nn
-
 from transformers import (
     AutoConfig,
     AutoModelForTokenClassification,
@@ -36,6 +32,7 @@ from transformers import (
 )
 from Src.Data import Split, TokenClassificationDataset, TokenClassificationTask, data_collator
 from Src.Train import SoftTrainer
+from Src.Utils import compute_metrics, align_predictions
 
 
 logger = logging.getLogger(__name__)
@@ -145,6 +142,13 @@ def main():
     )
     logger.info("Training/evaluation parameters %s", training_args)
 
+    weak_name = data_args.weak_src if data_args.weak_src else 'true'
+    output_test_results_file = os.path.join(
+        training_args.output_dir, f"{data_args.dataset_name}-{weak_name}-{training_args.seed}-test_results.txt"
+    )
+    if os.path.exists(output_test_results_file):
+        os.remove(output_test_results_file)
+
     # Set seed
     set_seed(training_args.seed)
 
@@ -213,46 +217,21 @@ def main():
         else None
     )
 
-    def align_predictions(predictions: np.ndarray, label_ids: np.ndarray) -> Tuple[List[int], List[int]]:
-        preds = np.argmax(predictions, axis=2)
-
-        batch_size, seq_len = preds.shape
-
-        out_label_list = [[] for _ in range(batch_size)]
-        preds_list = [[] for _ in range(batch_size)]
-
-        for i in range(batch_size):
-            for j in range(seq_len):
-                if label_ids[i, j] != nn.CrossEntropyLoss().ignore_index:
-                    out_label_list[i].append(label_map[label_ids[i][j]])
-                    preds_list[i].append(label_map[preds[i][j]])
-
-        return preds_list, out_label_list
-
-    # noinspection PyTypeChecker
-    def compute_metrics(p: EvalPrediction) -> Dict:
-        preds_list, out_label_list = align_predictions(p.predictions, p.label_ids)
-        return {
-            "accuracy_score": accuracy_score(out_label_list, preds_list),
-            "precision": precision_score(out_label_list, preds_list),
-            "recall": recall_score(out_label_list, preds_list),
-            "f1": f1_score(out_label_list, preds_list),
-        }
-
     # Initialize our Trainer
     trainer = SoftTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        compute_metrics=compute_metrics,
+        compute_metrics=lambda p: compute_metrics(p, label_map=label_map),
         data_collator=data_collator
     )
 
     # Training
     if training_args.do_train:
         trainer.train(
-            model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
+            model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None,
+            save_file=output_test_results_file
         )
         trainer.save_model()
         if trainer.is_world_master():
@@ -274,7 +253,7 @@ def main():
         )
 
         predictions, label_ids, metrics = trainer.predict(test_dataset)
-        preds_list, _ = align_predictions(predictions, label_ids)
+        preds_list, _ = align_predictions(predictions, label_ids, label_map=label_map)
 
         weak_name = data_args.weak_src if data_args.weak_src else 'true'
         output_test_results_file = os.path.join(
