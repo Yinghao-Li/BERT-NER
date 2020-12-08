@@ -4,6 +4,7 @@ import math
 import os
 import warnings
 import numpy as np
+import copy
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from packaging import version
 from tqdm.auto import tqdm
@@ -387,7 +388,7 @@ class SoftTrainer(Trainer):
             if self.args.do_eval and not start_eval:
                 if hasattr(self.args, 'self_training_start_epoch') and epoch > self.args.self_training_start_epoch-10:
                     start_eval = True
-                elif epoch > num_train_epochs / 3:
+                elif epoch > num_train_epochs / 4:
                     start_eval = True
 
             if start_eval:
@@ -402,10 +403,11 @@ class SoftTrainer(Trainer):
                         for key, value in eval_results.items():
                             logger.info("  %s = %s", key, value)
                             writer.write("%s = %s\n" % (key, value))
+                        writer.write("  checkpoint updated!  \n")
 
                 if f1 > best_f1:
                     best_f1 = f1
-                    best_state_dict = self.model.state_dict()
+                    best_state_dict = copy.deepcopy(self.model.state_dict())
                     logger.info("  checkpoint updated!  ")
 
             if self.args.tpu_metrics_debug or self.args.debug:
