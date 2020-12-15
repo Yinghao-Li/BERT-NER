@@ -89,7 +89,6 @@ if is_tensorboard_available():
 
     DEFAULT_CALLBACKS.append(TensorBoardCallback)
 
-
 if is_wandb_available():
     from transformers.integrations import WandbCallback
 
@@ -197,8 +196,8 @@ class SoftTrainer(Trainer):
 
         # Check if saved optimizer or scheduler states exist
         if (model_path is not None
-            and os.path.isfile(os.path.join(model_path, "optimizer.pt"))
-            and os.path.isfile(os.path.join(model_path, "scheduler.pt"))):
+                and os.path.isfile(os.path.join(model_path, "optimizer.pt"))
+                and os.path.isfile(os.path.join(model_path, "scheduler.pt"))):
             # Load in optimizer and scheduler states
             self.optimizer.load_state_dict(
                 torch.load(os.path.join(model_path, "optimizer.pt"), map_location=self.args.device)
@@ -236,9 +235,9 @@ class SoftTrainer(Trainer):
             total_train_batch_size = self.args.train_batch_size * xm.xrt_world_size()
         else:
             total_train_batch_size = (
-                self.args.train_batch_size
-                * self.args.gradient_accumulation_steps
-                * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1)
+                    self.args.train_batch_size
+                    * self.args.gradient_accumulation_steps
+                    * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1)
             )
 
         num_examples = (
@@ -292,7 +291,6 @@ class SoftTrainer(Trainer):
 
         self.control = self.callback_handler.on_train_begin(self.args, self.state, self.control)
 
-        start_eval = False
         for epoch in range(epochs_trained, num_train_epochs):
             logger.info("  ---------- Start Epoch %d ----------  ", epoch)
             logger.info("  ---------- Start Training ----------  ")
@@ -325,9 +323,9 @@ class SoftTrainer(Trainer):
                     self.control = self.callback_handler.on_step_begin(self.args, self.state, self.control)
 
                 if (
-                    ((step + 1) % self.args.gradient_accumulation_steps != 0)
-                    and self.args.local_rank != -1
-                    and _use_ddp_no_sync
+                        ((step + 1) % self.args.gradient_accumulation_steps != 0)
+                        and self.args.local_rank != -1
+                        and _use_ddp_no_sync
                 ):
                     with model.no_sync():
                         tr_loss += self.training_step(model, inputs)
@@ -336,7 +334,7 @@ class SoftTrainer(Trainer):
                 self._total_flos += self.floating_point_ops(inputs)
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
-                    # last step in epoch but step is always smaller than gradient_accumulation_steps
+                        # last step in epoch but step is always smaller than gradient_accumulation_steps
                         self.args.gradient_accumulation_steps >= steps_in_epoch == (step + 1)
                 ):
                     if self.args.fp16 and _use_native_amp:
@@ -366,16 +364,41 @@ class SoftTrainer(Trainer):
 
             self.control = self.callback_handler.on_epoch_end(self.args, self.state, self.control)
 
-            if self.args.do_eval and epoch > num_train_epochs / 3:
-                start_eval = True
+            # load best model parameters before self-training
+            if hasattr(self.args, 'self_training_start_epoch') and \
+                    epoch == self.args.self_training_start_epoch and \
+                    best_state_dict is not None:
+                logger.info(
+                    f"Loading best Phase I model..."
+                )
+                self.model.load_state_dict(best_state_dict)
 
-            if start_eval:
-                logger.info("  ---------- Start Evaluation ----------  ")
+            # Teacher-student session
+            if hasattr(self.args, 'self_training_start_epoch') and \
+                    epoch >= self.args.self_training_start_epoch and \
+                    (epoch - self.args.self_training_start_epoch) % self.args.teacher_update_period == 0:
+                model.eval()
+                with torch.no_grad():
+                    preds, _, _ = self.prediction_loop(
+                        sequential_train_dataloader, description="Teacher-model-prediction"
+                    )
+                for i in range(len(self.train_dataset.features)):
+                    preds[i][self.train_dataset.features[i].weak_lb_weights == 0] = -np.inf
+                    p = soft_frequency(preds[i])
+                    self.train_dataset.features[i].weak_lb_weights = p
+                # update dataloader
+                train_dataloader = self.get_train_dataloader()
+                # exit evaluation mode
+                model.train()
+
+            # Phase I evaluation session
+            if self.args.do_eval:
+                logger.info("  ---------- Evaluation ----------  ")
                 eval_results = self.evaluate()
                 f1 = eval_results['eval_f1']
 
                 logger.info("***** Eval results *****")
-                if self.is_world_process_zero():
+                if self.is_world_master():
                     if save_file is not None:
                         with open(save_file, "a") as writer:
                             writer.write(f" ----- Epoch = {epoch} ----- \n")
@@ -417,7 +440,7 @@ class SoftTrainer(Trainer):
         return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
 
     def training_step(
-        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]
+            self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]
     ) -> torch.Tensor:
         model.train()
         for k, v in inputs.items():
@@ -469,7 +492,7 @@ class SoftTrainer(Trainer):
         return loss.detach()
 
     def prediction_step(
-        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool
+            self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on :obj:`model` using obj:`inputs`.
@@ -511,7 +534,7 @@ class SoftTrainer(Trainer):
             if self.args.past_index >= 0:
                 self._past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
                 # Remove the past from the logits.
-                logits = logits[: self.args.past_index - 1] + logits[self.args.past_index :]
+                logits = logits[: self.args.past_index - 1] + logits[self.args.past_index:]
 
         if prediction_loss_only:
             return loss, None, None

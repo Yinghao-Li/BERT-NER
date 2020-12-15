@@ -30,7 +30,7 @@ from transformers import (
     set_seed,
 )
 from Src.Data import Split, TokenClassificationDataset, TokenClassificationTask, data_collator
-from Src.Train import SoftTrainer
+from Src.SelfTrain import SoftTrainer
 from Src.Utils import align_predictions, compute_metrics
 
 
