@@ -136,7 +136,8 @@ class SoftTrainer(Trainer):
     def train(self,
               model_path: Optional[str] = None,
               trial: Union["optuna.Trial", Dict[str, Any]] = None,
-              save_file: Optional[str] = None):
+              save_file: Optional[str] = None,
+              confidence_threshold: Optional[float] = 0.8):
         """
         Main training entry point.
 
@@ -147,6 +148,7 @@ class SoftTrainer(Trainer):
             trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
             save_file:  where to save file
+            confidence_threshold: confidence threshold for training set substitution
         """
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
@@ -369,7 +371,7 @@ class SoftTrainer(Trainer):
                     epoch == self.args.self_training_start_epoch and \
                     best_state_dict is not None:
                 logger.info(
-                    f"Loading best Phase I model..."
+                    f"Loading the best Phase I model..."
                 )
                 self.model.load_state_dict(best_state_dict)
 
@@ -385,7 +387,8 @@ class SoftTrainer(Trainer):
                 for i in range(len(self.train_dataset.features)):
                     preds[i][self.train_dataset.features[i].weak_lb_weights == 0] = -np.inf
                     p = soft_frequency(preds[i])
-                    self.train_dataset.features[i].weak_lb_weights = p
+                    substitute_idx = (p > confidence_threshold).sum(axis=1).astype(bool)
+                    self.train_dataset.features[i].weak_lb_weights[substitute_idx] = p[substitute_idx]
                 # update dataloader
                 train_dataloader = self.get_train_dataloader()
                 # exit evaluation mode

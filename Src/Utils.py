@@ -207,7 +207,7 @@ def soft_frequency(logits, power=2, probs=False):
         p = logits
     f = np.sum(p, axis=0, keepdims=True)
     p = p ** power / f
-    p = p / np.sum(p, axis=-1, keepdims=True) + 1e-9
+    p = p / (np.sum(p, axis=-1, keepdims=True) + 1e-9)
     p[p != p] = 0
 
     return p
