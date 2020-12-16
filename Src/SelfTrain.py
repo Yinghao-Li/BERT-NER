@@ -401,7 +401,7 @@ class SoftTrainer(Trainer):
                 f1 = eval_results['eval_f1']
 
                 logger.info("***** Eval results *****")
-                if self.is_world_master():
+                if self.is_world_process_zero():
                     if save_file is not None:
                         with open(save_file, "a") as writer:
                             writer.write(f" ----- Epoch = {epoch} ----- \n")

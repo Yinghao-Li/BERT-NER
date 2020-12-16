@@ -8,7 +8,7 @@ from nltk.tokenize import word_tokenize
 from nltk.tokenize import sent_tokenize
 
 from Src.Data import InputExample, Split, TokenClassificationTask
-from Src.Utils import span_to_label
+from Src.Utils import span_to_label, anno_space_map
 from transformers import PreTrainedTokenizer
 
 logger = logging.getLogger(__name__)
@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 class NER(TokenClassificationTask):
     def __init__(self):
-        # in NER datasets, the last column is usually reserved for NER label
         self._mappings = None
         self._lbs = None
 
@@ -36,24 +35,17 @@ class NER(TokenClassificationTask):
         data = torch.load(file_path)
         words_list = data['sentences']
         spanned_labels_list = data['labels']
+
+        # load weak labels if they exist
         if dataset == 'Co03' and weak_src:
             weak_lbs_list, weak_scores = torch.load(weak_lbs_file_path)
+            # convert 19 NE types to 4
             if weak_scores[0].shape[1] == 39:
-                temp_spans = list()
-                for spans in weak_lbs_list:
-                    normalized_span = dict()
-                    for k, v in spans.items():
-                        norm_span = self._mappings.get(v[0][0], v[0][0])
-                        if norm_span in self._lbs:
-                            normalized_span[k] = norm_span
-                    temp_spans.append(normalized_span)
-                weak_lbs_list = temp_spans
+                weak_lbs_list = [anno_space_map(spans, self._mappings, self._lbs) for spans in weak_lbs_list]
         else:
             weak_lbs_list = torch.load(weak_lbs_file_path)[1] if weak_src else \
                 [None for _ in range(len(words_list))]
-        examples = []
 
-        # TODO: Divide the sequence that exceeds the maximum length into several instances
         special_tokens_count = tokenizer.num_special_tokens_to_add()
         buffer_length = 20
         max_token_len = max_seq_length - special_tokens_count - buffer_length
@@ -136,6 +128,7 @@ class NER(TokenClassificationTask):
         if weak_src:
             weak_lbs_list = tmp_score_list
 
+        examples = []
         for guid_index, (words, spanned_lbs, weak_lbs) in \
                 enumerate(zip(words_list, spanned_labels_list, weak_lbs_list)):
             if weak_lbs is not None and dataset != 'Co03':
@@ -154,8 +147,8 @@ class NER(TokenClassificationTask):
         with open(os.path.join(args.data_dir, args.dataset_name, f"{args.dataset_name}-metadata.json")) as f:
             metadata = json.load(f)
         lbs = metadata['labels']
+        bio_lbs = ["O"] + ["%s-%s" % (bi, label) for label in lbs for bi in "BI"]
         if 'mapping' in metadata.keys():
             self._mappings = metadata['mapping']
             self._lbs = lbs
-        bio_lbs = ["O"] + ["%s-%s" % (bi, label) for label in lbs for bi in "BI"]
         return bio_lbs

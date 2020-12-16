@@ -211,3 +211,17 @@ def soft_frequency(logits, power=2, probs=False):
     p[p != p] = 0
 
     return p
+
+
+def anno_space_map(spans, mappings, tgt_space):
+    norm_spans = dict()
+    for span, v in spans.items():
+        if isinstance(v, str):
+            norm_v = mappings.get(v, v)
+            if norm_v in tgt_space:
+                norm_spans[span] = norm_v
+        elif isinstance(v, tuple) or isinstance(v, list):
+            norm_v = mappings.get(v[0][0], v[0][0])
+            if norm_v in tgt_space:
+                norm_spans[span] = ((norm_v, v[0][1]),)
+    return norm_spans
