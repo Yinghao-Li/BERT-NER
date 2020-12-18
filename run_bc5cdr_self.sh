@@ -21,7 +21,7 @@ MODEL=allenai/scibert_scivocab_uncased
 
 for SEED in 24601 234 123
 do
-  CUDA_VISIBLE_DEVICES=$1 python bert_ner.py \
+  CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
       --weak_src nhmm \
@@ -45,7 +45,7 @@ done
 
 for SEED in 24601 234 123
 do
-  CUDA_VISIBLE_DEVICES=$1 python bert_ner.py \
+  CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
       --weak_src hmm \
@@ -69,7 +69,7 @@ done
 
 for SEED in 24601 234 123
 do
-  CUDA_VISIBLE_DEVICES=$1 python bert_ner.py \
+  CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
       --weak_src majority \
@@ -93,7 +93,7 @@ done
 
 for SEED in 24601 234 123
 do
-  CUDA_VISIBLE_DEVICES=$1 python bert_ner.py \
+  CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
       --weak_src iid \
