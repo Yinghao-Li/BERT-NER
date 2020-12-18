@@ -411,18 +411,18 @@ class SoftTrainer(Trainer):
                                 logger.info("  %s = %s", key, value)
                                 writer.write("%s = %s\n" % (key, value))
 
-                if epoch < self.args.self_training_start_epoch:
-                    if f1 > best_f1:
-                        best_f1 = f1
-                        best_state_dict = copy.deepcopy(self.model.state_dict())
-                        logger.info("  checkpoint updated!  ")
-                        writer.write("  checkpoint updated!  \n")
-                else:
-                    if f1 > best_self_f1:
-                        best_self_f1 = f1
-                        best_self_state_dict = copy.deepcopy(self.model.state_dict())
-                        logger.info("  self checkpoint updated!  ")
-                        writer.write("  self checkpoint updated!  \n")
+                            if epoch < self.args.self_training_start_epoch:
+                                if f1 > best_f1:
+                                    best_f1 = f1
+                                    best_state_dict = copy.deepcopy(self.model.state_dict())
+                                    logger.info("  checkpoint updated!  ")
+                                    writer.write("  checkpoint updated!  \n")
+                            else:
+                                if f1 > best_self_f1:
+                                    best_self_f1 = f1
+                                    best_self_state_dict = copy.deepcopy(self.model.state_dict())
+                                    logger.info("  self checkpoint updated!  ")
+                                    writer.write("  self checkpoint updated!  \n")
 
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
