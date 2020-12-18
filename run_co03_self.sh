@@ -11,20 +11,22 @@
 set -e
 
 DATASET=Co03
-EPOCH=20
-SELF_TRAINING_START_EPOCH=5
+EPOCH=25
+SELF_TRAINING_START_EPOCH=8
 TEACHER_UPDATE_PERIOD=2
 BATCH_SIZE=24
 MAX_SEQ_LEN=256
+LR=0.0001
 OUTPUT_DIR=./Co03-self-threshold
 
-for SEED in 0 42 24601 234 476
+for SEED in 24601 234 123
 do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
+      --learning_rate $LR \
       --weak_src nhmm \
-      --model_name_or_path bert-base-uncased \
+      --model_name_or_path roberta-base \
       --output_dir $OUTPUT_DIR \
       --max_seq_length $MAX_SEQ_LEN \
       --num_train_epochs $EPOCH \
@@ -42,13 +44,14 @@ done
 
 # ----------------------------------------
 
-for SEED in 0 42 24601 234 476
+for SEED in 24601 234 123
 do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
+      --learning_rate $LR \
       --weak_src hmm \
-      --model_name_or_path bert-base-uncased \
+      --model_name_or_path roberta-base \
       --output_dir $OUTPUT_DIR  \
       --max_seq_length $MAX_SEQ_LEN \
       --num_train_epochs $EPOCH \
@@ -66,13 +69,14 @@ done
 
 # ----------------------------------------
 
-for SEED in 0 42 24601 234 476
+for SEED in 24601 234 123
 do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
+      --learning_rate $LR \
       --weak_src majority \
-      --model_name_or_path bert-base-uncased \
+      --model_name_or_path roberta-base \
       --output_dir $OUTPUT_DIR \
       --max_seq_length $MAX_SEQ_LEN \
       --num_train_epochs $EPOCH \
@@ -90,13 +94,14 @@ done
 
 # ----------------------------------------
 
-for SEED in 0 42 24601 234 476
+for SEED in 24601 234 123
 do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
+      --learning_rate $LR \
       --weak_src iid \
-      --model_name_or_path bert-base-uncased \
+      --model_name_or_path roberta-base \
       --output_dir $OUTPUT_DIR \
       --max_seq_length $MAX_SEQ_LEN \
       --num_train_epochs $EPOCH \

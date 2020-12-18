@@ -288,7 +288,9 @@ class SoftTrainer(Trainer):
         self._total_flos = self.state.total_flos
 
         best_f1 = 0.0
+        best_self_f1 = 0.0
         best_state_dict = None
+        best_self_state_dict = None
         model.zero_grad()
 
         self.control = self.callback_handler.on_train_begin(self.args, self.state, self.control)
@@ -408,12 +410,19 @@ class SoftTrainer(Trainer):
                             for key, value in eval_results.items():
                                 logger.info("  %s = %s", key, value)
                                 writer.write("%s = %s\n" % (key, value))
-                            writer.write("  checkpoint updated!  \n")
 
-                if f1 > best_f1:
-                    best_f1 = f1
-                    best_state_dict = copy.deepcopy(self.model.state_dict())
-                    logger.info("  checkpoint updated!  ")
+                if epoch < self.args.self_training_start_epoch:
+                    if f1 > best_f1:
+                        best_f1 = f1
+                        best_state_dict = copy.deepcopy(self.model.state_dict())
+                        logger.info("  checkpoint updated!  ")
+                        writer.write("  checkpoint updated!  \n")
+                else:
+                    if f1 > best_self_f1:
+                        best_f1 = f1
+                        best_self_state_dict = copy.deepcopy(self.model.state_dict())
+                        logger.info("  self checkpoint updated!  ")
+                        writer.write("  self checkpoint updated!  \n")
 
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
@@ -431,11 +440,11 @@ class SoftTrainer(Trainer):
             # Clean the state at the end of training
             delattr(self, "_past")
 
-        if best_state_dict is not None:
+        if best_self_state_dict is not None:
             logger.info(
                 f"Loading best model..."
             )
-            self.model.load_state_dict(best_state_dict)
+            self.model.load_state_dict(best_self_state_dict)
         logger.info("\n\nTraining completed.\n\n")
 
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
