@@ -10,23 +10,22 @@
 # Quit if there's any errors
 set -e
 
-DATASET=Co03
-EPOCH=25
-SELF_TRAINING_START_EPOCH=8
-TEACHER_UPDATE_PERIOD=2
-BATCH_SIZE=24
-MAX_SEQ_LEN=256
-LR=0.0001
-OUTPUT_DIR=./Co03-self-threshold
+DATASET=NCBI
+EPOCH=100
+BATCH_SIZE=10
+MAX_SEQ_LEN=512
+SELF_TRAINING_START_EPOCH=40
+TEACHER_UPDATE_PERIOD=3
+OUTPUT_DIR=./NCBI-self-threshold
+MODEL=dmis-lab/biobert-v1.1
 
 for SEED in 24601 234 123
 do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
-      --learning_rate $LR \
       --weak_src nhmm \
-      --model_name_or_path bert-base-uncased \
+      --model_name_or_path $MODEL \
       --output_dir $OUTPUT_DIR \
       --max_seq_length $MAX_SEQ_LEN \
       --num_train_epochs $EPOCH \
@@ -49,9 +48,8 @@ do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
-      --learning_rate $LR \
       --weak_src hmm \
-      --model_name_or_path bert-base-uncased \
+      --model_name_or_path $MODEL \
       --output_dir $OUTPUT_DIR  \
       --max_seq_length $MAX_SEQ_LEN \
       --num_train_epochs $EPOCH \
@@ -74,9 +72,8 @@ do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
-      --learning_rate $LR \
       --weak_src majority \
-      --model_name_or_path bert-base-uncased \
+      --model_name_or_path $MODEL \
       --output_dir $OUTPUT_DIR \
       --max_seq_length $MAX_SEQ_LEN \
       --num_train_epochs $EPOCH \
@@ -99,9 +96,8 @@ do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
-      --learning_rate $LR \
       --weak_src iid \
-      --model_name_or_path bert-base-uncased \
+      --model_name_or_path $MODEL \
       --output_dir $OUTPUT_DIR \
       --max_seq_length $MAX_SEQ_LEN \
       --num_train_epochs $EPOCH \

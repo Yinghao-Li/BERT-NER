@@ -16,15 +16,16 @@ BATCH_SIZE=64
 MAX_SEQ_LEN=128
 SELF_TRAINING_START_EPOCH=40
 TEACHER_UPDATE_PERIOD=3
+OUTPUT_DIR=./Laptop-self-threshold
 
-for SEED in 0 42 24601 234 476
+for SEED in 24601 234 123
 do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
       --weak_src nhmm \
       --model_name_or_path bert-base-uncased \
-      --output_dir ./Laptop-output \
+      --output_dir $OUTPUT_DIR \
       --max_seq_length $MAX_SEQ_LEN \
       --num_train_epochs $EPOCH \
       --per_device_train_batch_size $BATCH_SIZE \
@@ -41,14 +42,14 @@ done
 
 # ----------------------------------------
 
-for SEED in 0 42 24601 234 476
+for SEED in 24601 234 123
 do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
       --weak_src hmm \
       --model_name_or_path bert-base-uncased \
-      --output_dir ./Laptop-output \
+      --output_dir $OUTPUT_DIR \
       --max_seq_length $MAX_SEQ_LEN \
       --num_train_epochs $EPOCH \
       --per_device_train_batch_size $BATCH_SIZE \
@@ -65,14 +66,14 @@ done
 
 # ----------------------------------------
 
-for SEED in 0 42 24601 234 476
+for SEED in 24601 234 123
 do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
       --weak_src majority \
       --model_name_or_path bert-base-uncased \
-      --output_dir ./Laptop-output \
+      --output_dir $OUTPUT_DIR \
       --max_seq_length $MAX_SEQ_LEN \
       --num_train_epochs $EPOCH \
       --per_device_train_batch_size $BATCH_SIZE \
@@ -89,14 +90,14 @@ done
 
 # ----------------------------------------
 
-for SEED in 0 42 24601 234 476
+for SEED in 24601 234 123
 do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
       --weak_src iid \
       --model_name_or_path bert-base-uncased \
-      --output_dir ./Laptop-output \
+      --output_dir $OUTPUT_DIR \
       --max_seq_length $MAX_SEQ_LEN \
       --num_train_epochs $EPOCH \
       --per_device_train_batch_size $BATCH_SIZE \
