@@ -419,7 +419,7 @@ class SoftTrainer(Trainer):
                         writer.write("  checkpoint updated!  \n")
                 else:
                     if f1 > best_self_f1:
-                        best_f1 = f1
+                        best_self_f1 = f1
                         best_self_state_dict = copy.deepcopy(self.model.state_dict())
                         logger.info("  self checkpoint updated!  ")
                         writer.write("  self checkpoint updated!  \n")
