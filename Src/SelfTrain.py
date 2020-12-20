@@ -289,6 +289,7 @@ class SoftTrainer(Trainer):
 
         best_f1 = 0.0
         best_self_f1 = 0.0
+        tolerance_epoch = 0
         best_state_dict = None
         best_self_state_dict = None
         model.zero_grad()
@@ -298,6 +299,16 @@ class SoftTrainer(Trainer):
         for epoch in range(epochs_trained, num_train_epochs):
             logger.info("  ---------- Start Epoch %d ----------  ", epoch)
             logger.info("  ---------- Start Training ----------  ")
+
+            # load best model parameters before self-training
+            if hasattr(self.args, 'self_training_start_epoch') and \
+                    epoch == self.args.self_training_start_epoch and \
+                    best_state_dict is not None:
+                logger.info(
+                    f"Loading the best Phase I model..."
+                )
+                self.model.load_state_dict(best_state_dict)
+
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
 
@@ -368,15 +379,6 @@ class SoftTrainer(Trainer):
 
             self.control = self.callback_handler.on_epoch_end(self.args, self.state, self.control)
 
-            # load best model parameters before self-training
-            if hasattr(self.args, 'self_training_start_epoch') and \
-                    epoch == self.args.self_training_start_epoch and \
-                    best_state_dict is not None:
-                logger.info(
-                    f"Loading the best Phase I model..."
-                )
-                self.model.load_state_dict(best_state_dict)
-
             # Teacher-student session
             if hasattr(self.args, 'self_training_start_epoch') and \
                     epoch >= self.args.self_training_start_epoch and \
@@ -406,23 +408,28 @@ class SoftTrainer(Trainer):
                 if self.is_world_process_zero():
                     if save_file is not None:
                         with open(save_file, "a") as writer:
-                            writer.write(f" ----- Epoch = {epoch} ----- \n")
+                            writer.write(f" ----- Epoch = {epoch+1} ----- \n")
                             for key, value in eval_results.items():
+                                if key == 'epoch':
+                                    continue
                                 logger.info("  %s = %s", key, value)
                                 writer.write("%s = %s\n" % (key, value))
 
                             if epoch < self.args.self_training_start_epoch:
-                                if f1 > best_f1:
+                                if f1 >= best_f1:
                                     best_f1 = f1
                                     best_state_dict = copy.deepcopy(self.model.state_dict())
                                     logger.info("  checkpoint updated!  ")
                                     writer.write("  checkpoint updated!  \n")
                             else:
-                                if f1 > best_self_f1:
+                                if f1 >= best_self_f1:
                                     best_self_f1 = f1
                                     best_self_state_dict = copy.deepcopy(self.model.state_dict())
+                                    tolerance_epoch = 0
                                     logger.info("  self checkpoint updated!  ")
                                     writer.write("  self checkpoint updated!  \n")
+                                else:
+                                    tolerance_epoch += 1
 
             if self.args.tpu_metrics_debug or self.args.debug:
                 if is_torch_tpu_available():
@@ -434,6 +441,8 @@ class SoftTrainer(Trainer):
                         "configured. Check your training configuration if this is unexpected."
                     )
             if self.control.should_training_stop:
+                break
+            if tolerance_epoch > self.args.early_stop_tolerance_epoch:
                 break
 
         if self.args.past_index and hasattr(self, "_past"):
@@ -449,7 +458,8 @@ class SoftTrainer(Trainer):
 
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
 
-        return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step)
+        return TrainOutput(self.state.global_step, tr_loss.item() / self.state.global_step), \
+            best_state_dict, best_self_state_dict
 
     def training_step(
             self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]

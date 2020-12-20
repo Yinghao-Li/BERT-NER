@@ -95,6 +95,9 @@ class DataTrainingArguments:
     teacher_update_period: int = field(
         default=1, metadata={"help": "How many epochs do we update the teacher model"}
     )
+    early_stop_tolerance_epoch: int = field(
+        default=10, metadata={"help": "How many tolerance epochs before quiting training"}
+    )
 
 
 def main():
@@ -110,9 +113,9 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    if hasattr(data_args, 'self_training_start_epoch'):
-        training_args.self_training_start_epoch = data_args.self_training_start_epoch
-        training_args.teacher_update_period = data_args.teacher_update_period
+    training_args.self_training_start_epoch = data_args.self_training_start_epoch
+    training_args.teacher_update_period = data_args.teacher_update_period
+    training_args.early_stop_tolerance_epoch = data_args.early_stop_tolerance_epoch
 
     if (
         os.path.exists(training_args.output_dir)
@@ -235,15 +238,14 @@ def main():
         data_collator=data_collator
     )
 
+    noisy_state_dict = None
+    self_state_dict = None
     # Training
     if training_args.do_train:
-        trainer.train(
+        _, noisy_state_dict, self_state_dict = trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None,
             save_file=output_test_results_file
         )
-        trainer.save_model()
-        if trainer.is_world_master():
-            tokenizer.save_pretrained(training_args.output_dir)
 
     # Predict
     if training_args.do_predict:
@@ -260,15 +262,30 @@ def main():
             mode=Split.test,
         )
 
-        predictions, label_ids, metrics = trainer.predict(test_dataset)
-        preds_list, _ = align_predictions(predictions, label_ids, label_map=label_map)
+        if noisy_state_dict:
+            logger.info('Loading best state dictionary trained with noisy labels')
+            trainer.model.load_state_dict(noisy_state_dict)
+            predictions, label_ids, metrics = trainer.predict(test_dataset)
+            preds_list, _ = align_predictions(predictions, label_ids, label_map=label_map)
 
-        if trainer.is_world_master():
-            with open(output_test_results_file, "a") as writer:
-                writer.write(" ----- Test Results ----- \n")
-                for key, value in metrics.items():
-                    logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
+            if trainer.is_local_process_zero():
+                with open(output_test_results_file, "a") as writer:
+                    writer.write("\n ----- Noisy Model Test Results ----- \n")
+                    for key, value in metrics.items():
+                        logger.info("  %s = %s", key, value)
+                        writer.write("%s = %s\n" % (key, value))
+        if self_state_dict:
+            logger.info('Loading best state dictionary trained with self-training')
+            trainer.model.load_state_dict(self_state_dict)
+            predictions, label_ids, metrics = trainer.predict(test_dataset)
+            preds_list, _ = align_predictions(predictions, label_ids, label_map=label_map)
+
+            if trainer.is_local_process_zero():
+                with open(output_test_results_file, "a") as writer:
+                    writer.write("\n ----- Self Training Test Results ----- \n")
+                    for key, value in metrics.items():
+                        logger.info("  %s = %s", key, value)
+                        writer.write("%s = %s\n" % (key, value))
 
     return None
 
