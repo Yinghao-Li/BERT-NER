@@ -16,6 +16,7 @@ BATCH_SIZE=64
 MAX_SEQ_LEN=128
 SELF_TRAINING_START_EPOCH=60
 TEACHER_UPDATE_PERIOD=3
+LR=0.00001
 OUTPUT_DIR=./Laptop-self-threshold
 
 for SEED in 24601 234 123
@@ -23,6 +24,7 @@ do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
+      --learning_rate $LR \
       --weak_src nhmm \
       --model_name_or_path bert-base-uncased \
       --output_dir $OUTPUT_DIR \
@@ -47,6 +49,7 @@ do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
+      --learning_rate $LR \
       --weak_src hmm \
       --model_name_or_path bert-base-uncased \
       --output_dir $OUTPUT_DIR \
@@ -71,6 +74,7 @@ do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
+      --learning_rate $LR \
       --weak_src majority \
       --model_name_or_path bert-base-uncased \
       --output_dir $OUTPUT_DIR \
@@ -95,6 +99,7 @@ do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
+      --learning_rate $LR \
       --weak_src iid \
       --model_name_or_path bert-base-uncased \
       --output_dir $OUTPUT_DIR \

@@ -16,6 +16,7 @@ BATCH_SIZE=8
 MAX_SEQ_LEN=480
 SELF_TRAINING_START_EPOCH=30
 TEACHER_UPDATE_PERIOD=2
+LR=0.00002
 OUTPUT_DIR=./MSTC-self-threshold
 MODEL=allenai/scibert_scivocab_uncased
 
@@ -24,6 +25,7 @@ do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
+      --learning_rate $LR \
       --weak_src nhmm \
       --model_name_or_path $MODEL \
       --output_dir $OUTPUT_DIR \
@@ -46,6 +48,7 @@ do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
+      --learning_rate $LR \
       --weak_src hmm \
       --model_name_or_path $MODEL \
       --output_dir $OUTPUT_DIR \
@@ -68,6 +71,7 @@ do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
+      --learning_rate $LR \
       --weak_src majority \
       --model_name_or_path $MODEL \
       --output_dir $OUTPUT_DIR \
@@ -90,6 +94,7 @@ do
   CUDA_VISIBLE_DEVICES=$1 python self_train.py \
       --data_dir ../data/ \
       --dataset_name $DATASET \
+      --learning_rate $LR \
       --weak_src iid \
       --model_name_or_path $MODEL \
       --output_dir $OUTPUT_DIR \
