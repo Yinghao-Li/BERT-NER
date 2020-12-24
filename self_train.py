@@ -117,17 +117,6 @@ def main():
     training_args.teacher_update_period = data_args.teacher_update_period
     training_args.early_stop_tolerance_epoch = data_args.early_stop_tolerance_epoch
 
-    if (
-        os.path.exists(training_args.output_dir)
-        and os.listdir(training_args.output_dir)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
-    ):
-        raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty. "
-            f"Use --overwrite_output_dir to overcome."
-        )
-
     module = import_module("Src.Task")
     try:
         token_classification_task_clazz = getattr(module, model_args.task_type)
