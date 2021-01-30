@@ -1,7 +1,7 @@
 {
     "data_dir": "../data",
     "dataset_name": "Laptop",
-    "weak_src": "nhmm",
+    "weak_src": "",
     "model_name_or_path": "distilbert-base-uncased",
     "output_dir": "./output",
     "max_seq_length": 128,
@@ -14,5 +14,7 @@
     "do_eval": true,
     "do_predict": true,
     "fp16": false,
-    "overwrite_output_dir": false
+    "overwrite_output_dir": true,
+    "overwrite_cache": true,
+    "data_ratio": 0.05
 }

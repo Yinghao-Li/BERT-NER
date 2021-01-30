@@ -2,6 +2,7 @@ import logging
 import os
 import torch
 import json
+import random
 import numpy as np
 from typing import List, Union, Optional
 from nltk.tokenize import word_tokenize
@@ -26,7 +27,9 @@ class NER(TokenClassificationTask):
             tokenizer: PreTrainedTokenizer,
             mode: Union[Split, str],
             max_seq_length: Optional[int] = 512,
-            weak_src: Optional[str] = None) -> List[InputExample]:
+            weak_src: Optional[str] = None,
+            data_ratio: Optional[float] = 1,
+    ) -> List[InputExample]:
         if isinstance(mode, Split):
             mode = mode.value
         file_path = os.path.join(data_dir, f"{dataset}-linked-{mode}.pt")
@@ -141,6 +144,12 @@ class NER(TokenClassificationTask):
             examples.append(InputExample(
                 guid=f"{mode}-{guid_index+1}", words=words, labels=lbs, weak_lb_weights=weak_lbs
             ))
+
+        if data_ratio < 1:
+            assert data_ratio > 0
+            random.shuffle(examples)
+            examples = examples[:round(len(examples) * data_ratio)]
+
         return examples
 
     def get_labels(self, args) -> List[str]:

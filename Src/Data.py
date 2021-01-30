@@ -82,6 +82,7 @@ class TokenClassificationTask:
             tokenizer: PreTrainedTokenizer,
             mode: Union[Split, str],
             max_seq_length: Optional[int] = None,
+            data_ratio: Optional[float] = 1,
             weak_src: Optional[str] = None) -> List[InputExample]:
         raise NotImplementedError
 
@@ -255,9 +256,12 @@ class TokenClassificationDataset(Dataset):
             max_seq_length: Optional[int] = None,
             overwrite_cache=False,
             weak_src: Optional[str] = None,
+            data_ratio: Optional[float] = 1,
             mode: Split = Split.train,
     ):
 
+        if mode != Split.train:
+            data_ratio = 1
         data_path = os.path.join(data_dir, dataset)
         # Load data features from cache or dataset file
         src_name = weak_src if weak_src else 'true'
@@ -281,7 +285,8 @@ class TokenClassificationDataset(Dataset):
                     tokenizer=tokenizer,
                     mode=mode,
                     weak_src=weak_src,
-                    max_seq_length=max_seq_length
+                    max_seq_length=max_seq_length,
+                    data_ratio=data_ratio
                 )
                 self.features = token_classification_task.convert_examples_to_features(
                     examples,

@@ -90,6 +90,9 @@ class DataTrainingArguments:
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
+    data_ratio: float = field(
+        default=1, metadata={'help': "the ratio of data that are used for training."}
+    )
 
 
 def main():
@@ -105,6 +108,8 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    if data_args.data_ratio < 1:
+        training_args.output_dir = training_args.output_dir + f'-{ data_args.data_ratio}'
     if (
         os.path.exists(training_args.output_dir)
         and os.listdir(training_args.output_dir)
@@ -195,6 +200,7 @@ def main():
             model_type=config.model_type,
             max_seq_length=data_args.max_seq_length,
             overwrite_cache=data_args.overwrite_cache,
+            data_ratio=data_args.data_ratio,
             mode=Split.train,
         )
         if training_args.do_train
